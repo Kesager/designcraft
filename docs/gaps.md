@@ -1,6 +1,6 @@
 # Where DesignCraft falls short of InDesign
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (book chapter update safety) · **Target:** Adobe InDesign 2026 (21.6)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-13 · **Change:** minor (desktop canvas IME implementation; native QA pending) · **Target:** Adobe InDesign 2026 (21.6)
 
 Every known shortfall against InDesign 2026, one entry each, ranked by how much it stops an
 InDesign professional from doing real work. This is the work list: agents pick from the top.
@@ -104,9 +104,14 @@ Kind: **F** feature · **U** UI/UX · **T** typography · **FF** file format · 
 ## High
 
 ### 8. Canvas text input has no IME (U, L)
-- **Missing:** composition input for Chinese, Japanese and Korean on the canvas (#322).
-  VectorCraft has an implementation to port.
-- **Estimate:** 10–20 h. **Doc:** [localization-parity.md](localization-parity.md)
+- **Implemented on desktop; automated tests pass:** canvas text editing routes IME preedit/commit
+  through a cancelable typing interaction, draws marked-text underlines, and positions the
+  candidate window at the caret. Regression tests cover commit, cancel, same-frame Text/Preedit,
+  and clear/commit ordering; the UI crate suite passes (213 passed, 1 ignored), and Clippy and
+  workspace formatting pass.
+- **Still missing:** native QA with Chinese, Japanese and Korean IMEs on Windows/macOS/Linux, and
+  the browser canvas IME path (#322).
+- **Estimate:** 2–6 h for verification and web follow-up. **Doc:** [localization-parity.md](localization-parity.md)
 
 ### 9. PDF output presets and standards (FF)
 - **Missing:** PDF/X-1a and PDF/X-3 (no flattener to PDF 1.3/1.4), Adobe PDF Presets and
@@ -227,5 +232,6 @@ Cue. These are excluded from every percentage.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | minor | Gap 8 narrowed: desktop IME code and tests pass; native QA and web input remain |
 | 2026-10-10 | minor | Gap 0 added and marked alpha blocker: manual text threading is missing (stage re-normalized to pre-alpha) |
 | 2026-10-10 | major | Created: 25 ranked gaps from the full re-measure against InDesign 2026 21.6 and issues #1–#352 |

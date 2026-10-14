@@ -496,6 +496,12 @@ pub struct DesignApp {
     pub color_applied: bool,
     pub perf: Perf,
     pub synthetic: Vec<egui::Event>,
+    /// Text currently marked by the system input method for canvas text editing.
+    pub(crate) ime_marked: Option<String>,
+    /// Active conversion clause in `ime_marked`, as a UTF-8 byte range.
+    pub(crate) ime_active_range: Option<(usize, usize)>,
+    /// Interrupt the host IME after canvas editing ended the composition.
+    pub(crate) ime_interrupt: bool,
     /// Story open in the Story Editor.
     pub story_editor: Option<designcraft_doc::StoryId>,
     control_rx: Option<Receiver<ControlRequest>>,
@@ -550,6 +556,9 @@ impl DesignApp {
             color_applied: false,
             perf: Perf::default(),
             synthetic: vec![],
+            ime_marked: None,
+            ime_active_range: None,
+            ime_interrupt: false,
             story_editor: None,
             control_rx: None,
             pending_shots: vec![],

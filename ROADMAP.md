@@ -2,7 +2,7 @@
 
 **Stage: pre-alpha** · next: alpha, ~0% and ~15–25 h away; beta ~28 points and ~420–750 h beyond that (the core-workflow gate, not the percentage: ready for real work is already ~47%)
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (cancelable macOS Dock Quit) · **Target:** Adobe InDesign 2026
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-13 · **Change:** minor (desktop canvas IME composition code; native QA pending) · **Target:** Adobe InDesign 2026
 
 DesignCraft aims at full Adobe InDesign parity, and to be better: faster, open (documented JSON
 format + IDML), scriptable by agents (MCP), and available on the web.
@@ -87,14 +87,14 @@ Interface strings translated, of 1,724 measured. Detail: [docs/localization-pari
 | Language | Code | Status | Translated |
 |---|---|---|---|
 | English | en | full | 100% |
-| Simplified Chinese | zh | partial (no canvas IME) | 83% |
+| Simplified Chinese | zh | partial (desktop canvas IME code; native QA pending, web not covered) | 83% |
 | Spanish | es | partial | 83% |
 | Hindi | hi | none | 0% |
 | Arabic | ar | partial (RTL UI and composition) | 85% |
 | French | fr | partial | 83% |
 | Portuguese (Brazil) | pt-br | partial | 61% |
 | Indonesian | id | none | 0% |
-| Japanese | ja | partial (no canvas IME) | 95% |
+| Japanese | ja | partial (desktop canvas IME code; native QA pending, web not covered) | 95% |
 | German | de | partial | 83% |
 | Korean | ko | none | 0% |
 | Vietnamese | vi | none | 0% |
@@ -129,6 +129,7 @@ list) · [roadmap.md](docs/roadmap.md) (milestones, plan) · [parity-checklist.m
 
 Newest first.
 
+- **2026-10-13** · Canvas text editing now accepts IME preedit/commit, previews marked text in a typing interaction, positions the candidate window at the caret, and has commit/cancel regression tests. UI crate tests pass (213 passed, 1 ignored), as do workspace formatting and UI crate Clippy; native Windows/macOS/Linux QA remains, and web IME is not covered. No readiness percentage change.
 - **2026-10-12** · macOS Dock Quit uses the same unsaved-document prompts as window and menu Quit. Repeated requests keep the current answers; Cancel retains every tab and unsaved recovery checkpoint, and completed Save/Don't Save answers exit through the ordinary event loop. No readiness percentage change.
 - **2026-10-12** · Orderly native exit writes the latest recovery state after finalizing current quit approvals; incomplete or stale plans keep their documents, and Undo to the saved state clears stale recovery. Unavailable or failed recovery is reported. Cancelable macOS Dock Quit remains open (#544). No readiness percentage change.
 - **2026-10-12** · Recovered documents keep a checkpoint until saved, closed or reverted, including a second crash before autosave. Restarted document IDs and explicit recovery folders preserve other snapshots; failed republishing retains the original. No readiness percentage change.

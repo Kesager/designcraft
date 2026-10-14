@@ -1,6 +1,6 @@
 # DesignCraft roadmap (detail)
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** minor (stage re-normalized to pre-alpha by the core-workflow gate; earlier today: major, milestones re-assessed; beta plan from the full re-measure) · **Target:** Adobe InDesign 2026 (21.6)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-13 · **Change:** minor (desktop canvas IME code added; native QA pending) · **Target:** Adobe InDesign 2026 (21.6)
 
 Forward-looking plan. The one-page summary is [ROADMAP.md](../ROADMAP.md); numbers are in
 [target-app-parity.md](target-app-parity.md); the work list is [gaps.md](gaps.md). Hours are
@@ -58,7 +58,7 @@ set exists; depth gaps are in gaps.md.
 |---|---|---|
 | M0 | Skeleton + vertical slice | ✅ |
 | M1 | Selection, transform, layers, pages, MCP | ✅ core; handle and snapping issues (#186, #188, #337) |
-| M2 | Type I (Type tool, threading, Character/Paragraph, composer) | partial: Type tool and composer ✅; **manual threading missing** (alpha blocker); caret formatting (#289); no IME (#322) |
+| M2 | Type I (Type tool, threading, Character/Paragraph, composer) | partial: Type tool and composer ✅; **manual threading missing** (alpha blocker); caret formatting (#289); desktop canvas IME code added, native QA/web input pending (#322) |
 | M3 | Styles (nested/GREP, bullets, keeps, span columns) | ✅; style editing reliability (#169) |
 | M4 | Color & effects | ✅ core; colour management depth |
 | M5 | Graphics & links | ✅ core; EPS preview only |
@@ -110,6 +110,7 @@ output intent · EPS place") is done except Books depth and EPS (preview only).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | minor | M2: canvas IME preedit/commit and regression tests pass (213 UI tests, 1 ignored); native QA and browser input remain |
 | 2026-10-10 | trivial | Ready figure 42% → 47% (method aligned with the standard); beta distance 28 points |
 | 2026-10-10 | minor | Alpha gate table added (6 core workflows); gate fails on manual threading, stage pre-alpha; A1 milestone and focus item 0 |
 | 2026-10-10 | major | Created: milestones moved from ROADMAP.md and re-assessed; Current focus and the beta plan from the full re-measure |

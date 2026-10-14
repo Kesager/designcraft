@@ -1024,6 +1024,43 @@ fn draw_text_selection(
     if !runs.is_empty() {
         draw_inverse_highlight(app, painter, xf, doc, &cs, ts.story, &runs);
     }
+    if ts.cell.is_none()
+        && let Some(marked) = app.ime_marked.as_ref()
+        && let Some(story) = doc.story(ts.story)
+    {
+        let end = ts.focus.min(story.text.len());
+        let start = end.saturating_sub(marked.len());
+        if story.text.get(start..end) == Some(marked.as_str()) {
+            let active = app.ime_active_range.map(|(a, b)| (start + a, start + b));
+            for ft in &cs.frames {
+                let (Some((a, _)), Some(it)) = (item_canvas_xf(doc, layout, ft.frame), doc.item(ft.frame)) else { continue };
+                let m = a * doc.text_xf(it);
+                for line in &ft.lines {
+                    let lo = start.max(line.range.start);
+                    let hi = end.min(line.range.end);
+                    if lo >= hi {
+                        continue;
+                    }
+                    for q in compose::highlight_quads(line, lo, hi, false) {
+                        let from = xf.to_screen(m * q[3]);
+                        let to = xf.to_screen(m * q[2]);
+                        painter.line_segment([from, to], Stroke::new(1.0, Color32::BLACK));
+                    }
+                    if let Some((active_start, active_end)) = active {
+                        let lo = active_start.max(line.range.start);
+                        let hi = active_end.min(line.range.end);
+                        if lo < hi {
+                            for q in compose::highlight_quads(line, lo, hi, false) {
+                                let from = xf.to_screen(m * q[3]);
+                                let to = xf.to_screen(m * q[2]);
+                                painter.line_segment([from, to], Stroke::new(2.5, Color32::BLACK));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     if ts.is_caret()
         && let Some((fi, x, bl, asc, desc)) = compose::caret(&cs, ts.focus)
         && let Some(ft) = cs.frames.get(fi)
@@ -1045,7 +1082,7 @@ fn draw_text_selection(
 /// Caret / text highlight inside a table cell (the cell's lines are offset by the cell origin).
 #[allow(clippy::too_many_arguments)]
 fn draw_cell_selection(
-    _app: &DesignApp,
+    app: &DesignApp,
     painter: &egui::Painter,
     xf: &Xf,
     doc: &Document,
@@ -1077,6 +1114,35 @@ fn draw_cell_selection(
             for q in compose::highlight_quads(l, s, e, past) {
                 let poly = q.map(|p| xf.to_screen(m * p));
                 painter.add(egui::Shape::convex_polygon(poly.to_vec(), Color32::from_rgba_unmultiplied(80, 140, 255, 110), Stroke::NONE));
+            }
+        }
+    }
+    if let Some(marked) = app.ime_marked.as_ref()
+        && let Some(story) = doc.text_story(ts.story, Some(cell))
+    {
+        let end = ts.focus.min(story.len());
+        let start = end.saturating_sub(marked.len());
+        if story.text.get(start..end) == Some(marked.as_str())
+            && let Some(cft) = text.frames.first()
+        {
+            for line in &cft.lines {
+                let lo = start.max(line.range.start);
+                let hi = end.min(line.range.end);
+                if lo >= hi {
+                    continue;
+                }
+                for q in compose::highlight_quads(line, lo, hi, false) {
+                    painter.line_segment([xf.to_screen(m * q[3]), xf.to_screen(m * q[2])], Stroke::new(1.0, Color32::BLACK));
+                }
+                if let Some((active_start, active_end)) = app.ime_active_range {
+                    let lo = (start + active_start).max(line.range.start);
+                    let hi = (start + active_end).min(line.range.end);
+                    if lo < hi {
+                        for q in compose::highlight_quads(line, lo, hi, false) {
+                            painter.line_segment([xf.to_screen(m * q[3]), xf.to_screen(m * q[2])], Stroke::new(2.5, Color32::BLACK));
+                        }
+                    }
+                }
             }
         }
     }
@@ -1366,6 +1432,119 @@ fn fmt_tick(v: f64) -> String {
     if (v - r).abs() < 1e-6 { format!("{}", r as i64) } else { format!("{v:.1}") }
 }
 
+fn char_offset(text: &str, index: usize) -> usize {
+    text.char_indices().nth(index).map_or(text.len(), |(byte, _)| byte)
+}
+
+fn clear_ime(app: &mut DesignApp, commit: bool) {
+    if app.ime_marked.take().is_none() {
+        return;
+    }
+    app.ime_active_range = None;
+    if commit {
+        if let Err(err) = app.session.commit_interaction() {
+            app.status(err.to_string());
+        }
+    } else {
+        app.session.cancel_interaction();
+    }
+    app.after_engine();
+}
+
+fn preview_ime(app: &mut DesignApp, text: &str, active_chars: Option<std::ops::Range<usize>>, committing: bool) {
+    if text.is_empty() {
+        return;
+    }
+    if app.ime_marked.is_none() {
+        if app.session.active().is_some_and(|st| st.interaction.is_some()) {
+            return;
+        }
+        if let Err(err) = app.session.begin_interaction("Typing") {
+            app.status(err.to_string());
+            return;
+        }
+    }
+    let params = json!({"text": text, "raw": !committing});
+    if let Err(err) = app.session.preview("text.insert", params) {
+        let was_composing = app.ime_marked.is_some();
+        app.status(err.to_string());
+        app.session.cancel_interaction();
+        app.ime_marked = None;
+        app.ime_active_range = None;
+        app.ime_interrupt |= was_composing;
+        app.after_engine();
+        return;
+    }
+    app.ime_marked = Some(text.to_string());
+    let char_len = text.chars().count();
+    app.ime_active_range = active_chars.map(|range| {
+        let start = range.start.min(char_len);
+        let end = range.end.max(start).min(char_len);
+        (char_offset(text, start), char_offset(text, end))
+    });
+    app.after_engine();
+}
+
+fn commit_ime(app: &mut DesignApp, text: Option<&str>) {
+    if app.ime_marked.is_none() {
+        if let Some(text) = text.filter(|text| !text.is_empty()) {
+            let _ = app.run("text.insert", json!({"text": text}));
+        }
+        return;
+    }
+    if let Some(text) = text.filter(|text| !text.is_empty()) {
+        preview_ime(app, text, None, true);
+    }
+    clear_ime(app, true);
+}
+
+fn update_ime_output(app: &mut DesignApp, ctx: &egui::Context, xf: &Xf) {
+    if !app.session.wants_text() || ctx.text_edit_focused() || app.ui.dialog.is_some() || app.ui.palette.is_some() {
+        if app.ime_marked.is_some() {
+            clear_ime(app, true);
+            app.ime_interrupt = true;
+        }
+        if std::mem::take(&mut app.ime_interrupt) {
+            ctx.output_mut(|out| {
+                out.ime = Some(egui::output::IMEOutput {
+                    purpose: egui::IMEPurpose::Normal,
+                    rect: Rect::NOTHING,
+                    cursor_rect: Rect::NOTHING,
+                    should_interrupt_composition: true,
+                });
+            });
+        }
+        return;
+    }
+    let Some(st) = app.session.active() else { return };
+    let Some(ts) = st.selection.text else { return };
+    let cs = app.session.cache.get(&st.doc, ts.story, None);
+    let at =
+        ts.focus.saturating_sub(app.ime_marked.as_ref().map_or(0, String::len)).saturating_add(app.ime_active_range.map_or(0, |(start, _)| start));
+    let caret = if let Some(cell) = ts.cell {
+        match cell.footnote_id() {
+            Some(id) => compose::note_caret(&cs, id, at),
+            None => compose::cell_caret(&cs, cell.table, cell.row, cell.col, at),
+        }
+    } else {
+        compose::caret(&cs, at)
+    };
+    let Some((fi, x, baseline, ascent, descent)) = caret else { return };
+    let Some(ft) = cs.frames.get(fi) else { return };
+    let layout = CanvasLayout::new(&st.doc, st.editing_parents);
+    let (Some((a, _)), Some(it)) = (item_canvas_xf(&st.doc, &layout, ft.frame), st.doc.item(ft.frame)) else {
+        return;
+    };
+    let m = a * st.doc.text_xf(it);
+    let rect = Rect::from_two_pos(xf.to_screen(m * Point::new(x, baseline - ascent)), xf.to_screen(m * Point::new(x, baseline + descent)))
+        .expand2(vec2(1.0, 0.0));
+    let interrupt = std::mem::take(&mut app.ime_interrupt);
+    ctx.output_mut(|out| {
+        out.ime =
+            Some(egui::output::IMEOutput { purpose: egui::IMEPurpose::Normal, rect, cursor_rect: rect, should_interrupt_composition: interrupt });
+    });
+}
+
 /// Presses in a row, this one included: each within egui's double-click delay and distance of the
 /// one before. Counted on the press, as text selection wants (egui counts releases, up to three).
 fn count_click(ui: &egui::Ui, id: egui::Id, at: Pos2, now: f64) -> u8 {
@@ -1423,6 +1602,12 @@ fn handle_input(app: &mut DesignApp, ui: &mut egui::Ui, resp: &egui::Response, r
     let mut down: bool = ui.data(|d| d.get_temp(down_id)).unwrap_or(false);
     let (pressed, released, origin, latest, now) =
         ui.input(|i| (i.pointer.primary_pressed(), i.pointer.primary_released(), i.pointer.press_origin(), i.pointer.latest_pos(), i.time));
+    let mut discard_ime_events = false;
+    if pressed && app.ime_marked.is_some() {
+        clear_ime(app, true);
+        app.ime_interrupt = true;
+        discard_ime_events = true;
+    }
     if pressed
         && !space
         && let Some(o) = origin.filter(|o| (if xf.rot == 0 { rect.contains(*o) } else { resp.rect.contains(*o) }) && resp.hovered())
@@ -1478,22 +1663,46 @@ fn handle_input(app: &mut DesignApp, ui: &mut egui::Ui, resp: &egui::Response, r
     }
     // Both split panes show the same document, but only the focused pane dispatches its keys.
     if app.pane != app.focus_pane || (ui.ctx().text_edit_focused() && !resp.has_focus()) {
+        update_ime_output(app, ui.ctx(), &xf);
         return;
     }
     let evs = ui.input(|i| i.events.clone());
+    let has_ime_event = evs.iter().any(|event| matches!(event, egui::Event::Ime(_)));
+    let mut ime_event_seen = discard_ime_events;
+    let mut ime_clear_pending = false;
     for e in evs {
         match e {
-            egui::Event::Text(t) if wants_text => {
+            egui::Event::Text(t) if wants_text && app.ime_marked.is_none() && (ime_event_seen || !has_ime_event) => {
                 let _ = app.run("text.insert", json!({"text": t}));
             }
-            egui::Event::Paste(t) if wants_text => {
+            egui::Event::Ime(egui::ImeEvent::Preedit { text, active_range_chars }) if !discard_ime_events && wants_text => {
+                ime_event_seen = true;
+                if text.is_empty() {
+                    ime_clear_pending = true;
+                } else {
+                    ime_clear_pending = false;
+                    preview_ime(app, &text, active_range_chars, false);
+                }
+            }
+            egui::Event::Ime(egui::ImeEvent::Commit(text)) if !discard_ime_events && (wants_text || app.ime_marked.is_some()) => {
+                ime_event_seen = true;
+                if text == "\n" || text == "\r" {
+                    commit_ime(app, None);
+                } else if text.is_empty() {
+                    clear_ime(app, false);
+                } else {
+                    commit_ime(app, Some(&text));
+                }
+                ime_clear_pending = false;
+            }
+            egui::Event::Paste(t) if wants_text && app.ime_marked.is_none() && (ime_event_seen || !has_ime_event) => {
                 // Formatted when the system clipboard still holds what was copied here;
                 // Shift (⇧⌘V) pastes without formatting.
                 let plain = ui.input(|i| i.modifiers.shift);
                 let id = if plain { "edit.pasteWithoutFormatting" } else { "edit.paste" };
                 let _ = app.run(id, json!({"text": t}));
             }
-            egui::Event::Copy | egui::Event::Cut if wants_text => {
+            egui::Event::Copy | egui::Event::Cut if wants_text && app.ime_marked.is_none() && (ime_event_seen || !has_ime_event) => {
                 let id = if matches!(e, egui::Event::Cut) { "edit.cut" } else { "edit.copy" };
                 if let Ok(r) = app.run(id, json!({}))
                     && let Some(t) = r.get("text").and_then(serde_json::Value::as_str)
@@ -1501,7 +1710,7 @@ fn handle_input(app: &mut DesignApp, ui: &mut egui::Ui, resp: &egui::Response, r
                     ui.ctx().copy_text(t.to_string());
                 }
             }
-            egui::Event::Key { key, pressed: true, modifiers, .. } => {
+            egui::Event::Key { key, pressed: true, modifiers, .. } if app.ime_marked.is_none() && (ime_event_seen || !has_ime_event) => {
                 let k = match key {
                     egui::Key::ArrowLeft => Some(ToolKey::Left),
                     egui::Key::ArrowRight => Some(ToolKey::Right),
@@ -1528,6 +1737,10 @@ fn handle_input(app: &mut DesignApp, ui: &mut egui::Ui, resp: &egui::Response, r
             _ => {}
         }
     }
+    if ime_clear_pending && app.ime_marked.is_some() {
+        clear_ime(app, false);
+    }
+    update_ime_output(app, ui.ctx(), &xf);
     let _ = DVec2::ZERO;
 }
 
@@ -1878,6 +2091,76 @@ mod tests {
 
     fn selected(h: &Harness<'_, DesignApp>) -> std::ops::Range<usize> {
         h.state().session.doc().unwrap().selection.text.map(|t| t.range()).unwrap_or_default()
+    }
+
+    fn story_for_frame(h: &Harness<'_, DesignApp>, id: u64) -> designcraft_doc::StoryId {
+        let doc = &h.state().session.doc().unwrap().doc;
+        match &doc.item(designcraft_doc::ItemId(id)).unwrap().content {
+            Content::Text(frame) => frame.story,
+            _ => panic!("frame is not text"),
+        }
+    }
+
+    fn story_text(h: &Harness<'_, DesignApp>, sid: designcraft_doc::StoryId) -> String {
+        h.state().session.doc().unwrap().doc.story(sid).unwrap().text.clone()
+    }
+
+    fn preedit(text: &str, active: Option<std::ops::Range<usize>>) -> egui::Event {
+        egui::Event::Ime(egui::ImeEvent::Preedit { text: text.to_string(), active_range_chars: active })
+    }
+
+    fn input_frame(h: &mut Harness<'_, DesignApp>, events: Vec<egui::Event>) {
+        let ctx = h.ctx.clone();
+        let app = h.state_mut();
+        let mut output = ctx.run_ui(
+            egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1440.0, 900.0))), events, ..Default::default() },
+            |ui| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+        );
+        output.textures_delta.clear();
+    }
+
+    #[test]
+    fn canvas_ime_preedit_commits_as_one_undo_step() {
+        let (mut h, id) = typing("A");
+        let sid = story_for_frame(&h, id);
+        h.state_mut().run("text.select", json!({"story": sid.0, "anchor": 0, "focus": 1})).unwrap();
+        let undo_before = h.state().session.doc().unwrap().history.undo.len();
+
+        input_frame(&mut h, vec![egui::Event::Text("g".into()), preedit("が", Some(1..1))]);
+        assert_eq!(story_text(&h, sid), "が");
+        assert!(h.state().session.doc().unwrap().interaction.is_some());
+        h.event(preedit("雅楽", Some(0..2)));
+        h.step();
+        assert_eq!(story_text(&h, sid), "雅楽");
+        input_frame(&mut h, vec![preedit("", None), egui::Event::Ime(egui::ImeEvent::Commit("雅楽".into()))]);
+
+        assert_eq!(story_text(&h, sid), "雅楽");
+        assert!(h.state().session.doc().unwrap().interaction.is_none());
+        assert_eq!(h.state().session.doc().unwrap().history.undo.len(), undo_before + 1);
+        h.state_mut().run("edit.undo", json!({})).unwrap();
+        assert_eq!(story_text(&h, sid), "A");
+    }
+
+    #[test]
+    fn cancelling_canvas_ime_restores_selection_without_undo() {
+        let (mut h, id) = typing("A");
+        let sid = story_for_frame(&h, id);
+        h.state_mut().run("text.select", json!({"story": sid.0, "anchor": 0, "focus": 1})).unwrap();
+        let undo_before = h.state().session.doc().unwrap().history.undo.len();
+
+        h.event(preedit("候補", Some(2..2)));
+        h.step();
+        assert_eq!(story_text(&h, sid), "候補");
+        h.event(preedit("", None));
+        h.step();
+
+        assert_eq!(story_text(&h, sid), "A");
+        assert!(h.state().session.doc().unwrap().interaction.is_none());
+        assert_eq!(h.state().session.doc().unwrap().history.undo.len(), undo_before);
     }
 
     #[test]

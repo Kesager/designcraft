@@ -1,6 +1,6 @@
 # UI and interaction parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** minor (stage re-normalized to pre-alpha by the core-workflow gate; earlier today: major, first version) · **Target:** Adobe InDesign 2026 (21.6, Medium Dark, macOS)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-13 · **Change:** minor (desktop canvas IME code added; native QA pending) · **Target:** Adobe InDesign 2026 (21.6, Medium Dark, macOS)
 
 Tools, handles, snapping, nudging, modifiers, shortcuts, panels, menus, context menus and feel,
 against InDesign 2026. The look was measured from the running app
@@ -39,7 +39,7 @@ basics of editing fail for too many users on Windows and Linux.
 | Threading: click out port, load text cursor, click frame | ✓ | ✗ ports drawn only; no thread/unthread command; Primary Text Frame and autoflow on Place | ✗ | **alpha blocker** (#352, #194, #165, #140) |
 | Copy / cut / paste objects and text, Paste Into / in Place | ✓ | ✓ on macOS | ~ | **failing on Windows/Linux** (#351, #348, #312, #185, #164, #201, #212) |
 | Context menus (canvas, panels, rulers) | ✓ everywhere | 9 context-menu sites, ruler units by right-click | ~ | **not opening for several users** (#238, #187, #160) |
-| IME text input on the canvas | ✓ | ✗ | ✗ | #322 |
+| IME text input on the canvas | ✓ | desktop preedit/commit code; UI tests, Clippy and format checks pass | ~ | Native Windows/macOS/Linux QA and web canvas input remain (#322) |
 | Font menu: search, preview, favourites, type-ahead | ✓ | ✓ | ~ | search field focus on macOS (#335, #86) |
 | Keyboard shortcuts: InDesign defaults, editor, sets | ✓ | ✓ editor; defaults from 09-shortcuts.md | ✓ | |
 | Quick Apply | ✓ | ✓ | ✓ | |
@@ -73,5 +73,6 @@ context menus, typing at a caret) are things a layout artist does every minute, 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | minor | Desktop canvas IME code and regression tests pass; native verification and browser input remain |
 | 2026-10-10 | minor | Threading row corrected to ✗ after checking the code (no out-port interaction, no thread command) |
 | 2026-10-10 | major | Created: measured menu coverage, 27-row interaction checklist from the code and issues |
